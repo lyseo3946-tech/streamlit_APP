@@ -1,6 +1,4 @@
-parking-app/
-│
-├── import streamlit as st
+import streamlit as st
 import pandas as pd
 import folium
 from streamlit_folium import st_folium
@@ -11,272 +9,328 @@ st.set_page_config(
     layout="wide"
 )
 
-
 st.title("🚗 서울시 공영주차장 요금 지도")
-st.write(
-    "CSV 데이터를 업로드하면 자치구별 유료 공영주차장을 지도에서 확인할 수 있습니다."
-)
 
 
-# ----------------------------
+# -----------------------------
 # 파일 업로드
-# ----------------------------
+# -----------------------------
 
 uploaded_file = st.file_uploader(
-    "서울 공영주차장 CSV 업로드",
+    "서울시 공영주차장 데이터 업로드 (CSV/XLSX)",
     type=["csv", "xlsx"]
 )
 
 
-if uploaded_file:
+if uploaded_file is None:
+    st.info("공영주차장 파일을 업로드하세요.")
+    st.stop()
 
-    # 파일 읽기
+
+# -----------------------------
+# 데이터 읽기
+# -----------------------------
+
+try:
     if uploaded_file.name.endswith(".csv"):
-        df = pd.read_csv(
-            uploaded_file,
-            encoding="utf-8"
-        )
+
+        try:
+            df = pd.read_csv(
+                uploaded_file,
+                encoding="utf-8"
+            )
+
+        except:
+            df = pd.read_csv(
+                uploaded_file,
+                encoding="cp949"
+            )
 
     else:
         df = pd.read_excel(uploaded_file)
 
 
-    st.subheader("데이터 미리보기")
-    st.dataframe(df.head())
+except Exception as e:
+    st.error(f"파일 읽기 오류: {e}")
+    st.stop()
 
 
-    # ----------------------------
-    # 컬럼 자동 탐색
-    # ----------------------------
 
-    def find_column(columns, keywords):
-
-        for col in columns:
-            for k in keywords:
-                if k in col:
-                    return col
-
-        return None
+st.subheader("데이터 확인")
+st.dataframe(df.head())
 
 
-    name_col = find_column(
-        df.columns,
-        ["주차장명", "명칭", "시설명"]
+# -----------------------------
+# 컬럼 자동 찾기
+# -----------------------------
+
+def search_column(columns, words):
+
+    for col in columns:
+        col = str(col)
+
+        for word in words:
+            if word in col:
+                return col
+
+    return None
+
+
+
+name_col = search_column(
+    df.columns,
+    ["주차장명", "주차장", "명칭", "시설명"]
+)
+
+gu_col = search_column(
+    df.columns,
+    ["자치구", "구"]
+)
+
+lat_col = search_column(
+    df.columns,
+    ["위도", "LAT", "lat"]
+)
+
+lon_col = search_column(
+    df.columns,
+    ["경도", "LON", "lon"]
+)
+
+fee_col = search_column(
+    df.columns,
+    ["기본요금", "요금", "주차요금", "금액"]
+)
+
+
+
+missing = []
+
+if name_col is None:
+    missing.append("주차장명")
+
+if gu_col is None:
+    missing.append("자치구")
+
+if lat_col is None:
+    missing.append("위도")
+
+if lon_col is None:
+    missing.append("경도")
+
+if fee_col is None:
+    missing.append("요금")
+
+
+
+if missing:
+
+    st.error(
+        "필수 컬럼을 찾지 못했습니다: "
+        + ", ".join(missing)
     )
 
-    gu_col = find_column(
-        df.columns,
-        ["자치구", "구"]
+    st.write("현재 데이터 컬럼:")
+    st.write(list(df.columns))
+
+    st.stop()
+
+
+
+# -----------------------------
+# 데이터 정리
+# -----------------------------
+
+
+df[lat_col] = pd.to_numeric(
+    df[lat_col],
+    errors="coerce"
+)
+
+df[lon_col] = pd.to_numeric(
+    df[lon_col],
+    errors="coerce"
+)
+
+
+df = df.dropna(
+    subset=[
+        lat_col,
+        lon_col
+    ]
+)
+
+
+
+# 요금 숫자 추출
+
+df["요금숫자"] = (
+    df[fee_col]
+    .astype(str)
+    .str.extract(r"(\d+)")
+)
+
+
+df["요금숫자"] = pd.to_numeric(
+    df["요금숫자"],
+    errors="coerce"
+)
+
+
+
+# -----------------------------
+# 유료 주차장만 표시
+# -----------------------------
+
+
+paid = df[
+    df["요금숫자"] > 0
+].copy()
+
+
+
+if len(paid) == 0:
+
+    st.warning(
+        "유료 주차장 데이터가 없습니다."
     )
 
-    lat_col = find_column(
-        df.columns,
-        ["위도", "LAT", "lat"]
-    )
-
-    lon_col = find_column(
-        df.columns,
-        ["경도", "LON", "lon"]
-    )
-
-    fee_col = find_column(
-        df.columns,
-        ["요금", "기본요금", "시간요금"]
-    )
+    st.stop()
 
 
-    if not all(
-        [name_col, gu_col, lat_col, lon_col, fee_col]
-    ):
 
-        st.error(
-            """
-            필요한 컬럼을 찾지 못했습니다.
+st.success(
+    f"유료 주차장 {len(paid)}개 검색됨"
+)
 
-            필요한 항목:
-            - 주차장명
-            - 자치구
-            - 위도
-            - 경도
-            - 요금
-            """
+
+
+# -----------------------------
+# 자치구 선택
+# -----------------------------
+
+
+gu_list = sorted(
+    paid[gu_col]
+    .dropna()
+    .astype(str)
+    .unique()
+)
+
+
+selected_gu = st.selectbox(
+    "자치구 선택",
+    gu_list
+)
+
+
+
+result = paid[
+    paid[gu_col].astype(str)
+    == selected_gu
+]
+
+
+
+# -----------------------------
+# 요금 필터
+# -----------------------------
+
+
+max_fee = int(
+    result["요금숫자"].max()
+)
+
+
+fee = st.slider(
+    "최대 기본요금",
+    0,
+    max_fee,
+    max_fee
+)
+
+
+result = result[
+    result["요금숫자"] <= fee
+]
+
+
+
+st.write(
+    f"검색 결과 : {len(result)}개"
+)
+
+
+
+# -----------------------------
+# 지도
+# -----------------------------
+
+
+map_center = [
+    result[lat_col].mean(),
+    result[lon_col].mean()
+]
+
+
+m = folium.Map(
+    location=map_center,
+    zoom_start=13
+)
+
+
+
+for _, row in result.iterrows():
+
+    popup_text = f"""
+    <b>{row[name_col]}</b><br>
+    자치구 : {row[gu_col]}<br>
+    요금 : {row[fee_col]}
+    """
+
+    folium.Marker(
+        location=[
+            row[lat_col],
+            row[lon_col]
+        ],
+        popup=popup_text,
+        tooltip=row[name_col],
+        icon=folium.Icon(
+            color="red",
+            icon="car",
+            prefix="fa"
         )
-
-        st.stop()
-
-
-    # ----------------------------
-    # 데이터 정리
-    # ----------------------------
-
-    df[lat_col] = pd.to_numeric(
-        df[lat_col],
-        errors="coerce"
-    )
-
-    df[lon_col] = pd.to_numeric(
-        df[lon_col],
-        errors="coerce"
-    )
+    ).add_to(m)
 
 
-    df = df.dropna(
-        subset=[
-            lat_col,
-            lon_col
-        ]
-    )
+
+st_folium(
+    m,
+    width=1200,
+    height=600
+)
 
 
-    # 요금 숫자화
-    df["요금_숫자"] = (
-        df[fee_col]
-        .astype(str)
-        .str.extract(r"(\d+)")
-    )
 
-    df["요금_숫자"] = pd.to_numeric(
-        df["요금_숫자"],
-        errors="coerce"
-    )
+# -----------------------------
+# 결과표
+# -----------------------------
 
 
-    # ----------------------------
-    # 유료 주차장 필터
-    # ----------------------------
-
-    paid_df = df[
-        df["요금_숫자"].fillna(0) > 0
-    ].copy()
+st.subheader("주차장 목록")
 
 
-    st.success(
-        f"유료 공영주차장 {len(paid_df)}개 발견"
-    )
+columns = [
+    name_col,
+    gu_col,
+    fee_col
+]
 
 
-    # ----------------------------
-    # 자치구 선택
-    # ----------------------------
-
-    gus = sorted(
-        paid_df[gu_col]
-        .dropna()
-        .unique()
-    )
+if "주소" in result.columns:
+    columns.append("주소")
 
 
-    selected_gu = st.selectbox(
-        "서울시 자치구 선택",
-        gus
-    )
-
-
-    filtered = paid_df[
-        paid_df[gu_col] == selected_gu
-    ]
-
-
-    # ----------------------------
-    # 요금 범위
-    # ----------------------------
-
-    max_fee = int(
-        filtered["요금_숫자"].max()
-    )
-
-
-    fee_limit = st.slider(
-        "최대 시간 요금",
-        0,
-        max_fee,
-        max_fee
-    )
-
-
-    filtered = filtered[
-        filtered["요금_숫자"]
-        <= fee_limit
-    ]
-
-
-    st.write(
-        f"검색 결과: {len(filtered)}개"
-    )
-
-
-    # ----------------------------
-    # 지도 생성
-    # ----------------------------
-
-    center = [
-        filtered[lat_col].mean(),
-        filtered[lon_col].mean()
-    ]
-
-
-    m = folium.Map(
-        location=center,
-        zoom_start=13
-    )
-
-
-    for _, row in filtered.iterrows():
-
-        popup = f"""
-        <b>{row[name_col]}</b><br>
-        자치구: {row[gu_col]}<br>
-        요금: {row[fee_col]}<br>
-        주소: {row.get('주소','')}
-        """
-
-        folium.Marker(
-            [
-                row[lat_col],
-                row[lon_col]
-            ],
-            popup=popup,
-            tooltip=row[name_col],
-            icon=folium.Icon(
-                color="blue",
-                icon="car",
-                prefix="fa"
-            )
-        ).add_to(m)
-
-
-    st_folium(
-        m,
-        width=1200,
-        height=650
-    )
-
-
-    # ----------------------------
-    # 결과 테이블
-    # ----------------------------
-
-    st.subheader("검색 결과")
-
-    show_cols = [
-        name_col,
-        gu_col,
-        fee_col
-    ]
-
-    if "주소" in filtered.columns:
-        show_cols.append("주소")
-
-
-    st.dataframe(
-        filtered[show_cols]
-        .reset_index(drop=True)
-    )
-
-else:
-
-    st.info(
-        "서울 공영주차장 CSV 파일을 업로드하세요."
-    )
-├── requirements.txt
-└── README.md
+st.dataframe(
+    result[columns]
+)
