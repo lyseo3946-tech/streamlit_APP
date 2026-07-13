@@ -9,15 +9,43 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🚗 서울시 공영주차장 요금 지도")
+
+st.title("🚗 서울시 유료 공영주차장 지도")
 
 
-# -------------------------
+# -----------------------------
+# 데이터 읽기 (캐싱)
+# -----------------------------
+
+@st.cache_data
+def load_data(file):
+
+    if file.name.endswith(".csv"):
+
+        try:
+            return pd.read_csv(
+                file,
+                encoding="utf-8"
+            )
+
+        except:
+            return pd.read_csv(
+                file,
+                encoding="cp949"
+            )
+
+    else:
+
+        return pd.read_excel(file)
+
+
+
+# -----------------------------
 # 파일 업로드
-# -------------------------
+# -----------------------------
 
 file = st.file_uploader(
-    "서울시 공영주차장 데이터 업로드",
+    "공영주차장 데이터 업로드",
     type=["csv", "xlsx"]
 )
 
@@ -27,85 +55,72 @@ if file is None:
     st.stop()
 
 
-# -------------------------
-# 파일 읽기
-# -------------------------
 
-try:
-
-    if file.name.endswith(".csv"):
-
-        try:
-            df = pd.read_csv(
-                file,
-                encoding="utf-8"
-            )
-
-        except:
-            df = pd.read_csv(
-                file,
-                encoding="cp949"
-            )
-
-    else:
-        df = pd.read_excel(file)
-
-
-except Exception as e:
-
-    st.error(f"파일 오류 : {e}")
-    st.stop()
+df = load_data(file)
 
 
 
-st.subheader("데이터 확인")
-st.dataframe(df.head())
+st.success(
+    f"데이터 {len(df):,}건 로드 완료"
+)
 
 
-# -------------------------
-# 컬럼 직접 선택
-# -------------------------
 
-st.subheader("데이터 컬럼 지정")
+# 너무 큰 데이터 보호
+if len(df) > 50000:
+
+    st.warning(
+        "데이터가 커서 처음 50,000개만 분석합니다."
+    )
+
+    df = df.head(50000)
 
 
-columns = list(df.columns)
+
+# -----------------------------
+# 컬럼 선택
+# -----------------------------
+
+st.subheader("컬럼 설정")
+
+
+cols = list(df.columns)
 
 
 name_col = st.selectbox(
-    "주차장명 컬럼",
-    columns
+    "주차장명",
+    cols
 )
 
 
 gu_col = st.selectbox(
-    "자치구 컬럼",
-    columns
+    "자치구",
+    cols
 )
 
 
 lat_col = st.selectbox(
-    "위도(Y) 컬럼",
-    columns
+    "위도(Y)",
+    cols
 )
 
 
 lon_col = st.selectbox(
-    "경도(X) 컬럼",
-    columns
+    "경도(X)",
+    cols
 )
 
 
 fee_col = st.selectbox(
-    "요금 컬럼",
-    columns
+    "요금",
+    cols
 )
 
 
 
-# -------------------------
-# 데이터 정리
-# -------------------------
+# -----------------------------
+# 데이터 변환
+# -----------------------------
 
 
 df[lat_col] = pd.to_numeric(
@@ -120,6 +135,21 @@ df[lon_col] = pd.to_numeric(
 )
 
 
+
+df["요금숫자"] = (
+    df[fee_col]
+    .astype(str)
+    .str.extract(r"(\d+)")
+)
+
+
+df["요금숫자"] = pd.to_numeric(
+    df["요금숫자"],
+    errors="coerce"
+)
+
+
+
 df = df.dropna(
     subset=[
         lat_col,
@@ -129,36 +159,21 @@ df = df.dropna(
 
 
 
-# 요금 숫자 변환
-
-df["요금_숫자"] = (
-    df[fee_col]
-    .astype(str)
-    .str.extract(r"(\d+)")
-)
-
-
-df["요금_숫자"] = pd.to_numeric(
-    df["요금_숫자"],
-    errors="coerce"
-)
-
-
-
-# -------------------------
+# -----------------------------
 # 유료 주차장만
-# -------------------------
+# -----------------------------
+
 
 paid = df[
-    df["요금_숫자"] > 0
+    df["요금숫자"] > 0
 ].copy()
 
 
 
-if len(paid) == 0:
+if paid.empty:
 
-    st.warning(
-        "요금 데이터에서 유료 주차장을 찾지 못했습니다."
+    st.error(
+        "유료 주차장을 찾지 못했습니다."
     )
 
     st.stop()
@@ -166,16 +181,17 @@ if len(paid) == 0:
 
 
 st.success(
-    f"유료 주차장 {len(paid)}개"
+    f"유료 주차장 {len(paid):,}개"
 )
 
 
 
-# -------------------------
+# -----------------------------
 # 자치구 선택
-# -------------------------
+# -----------------------------
 
-gus = sorted(
+
+gu_list = sorted(
     paid[gu_col]
     .dropna()
     .astype(str)
@@ -185,65 +201,74 @@ gus = sorted(
 
 
 selected_gu = st.selectbox(
-    "서울시 자치구 선택",
-    gus
+    "자치구 선택",
+    gu_list
 )
 
 
 
-filtered = paid[
+result = paid[
     paid[gu_col].astype(str)
     == selected_gu
 ]
 
 
 
-# -------------------------
+# -----------------------------
 # 요금 필터
-# -------------------------
+# -----------------------------
+
 
 max_fee = int(
-    filtered["요금_숫자"].max()
+    result["요금숫자"].max()
 )
 
 
-fee_limit = st.slider(
-    "최대 주차 요금",
+fee = st.slider(
+    "최대 기본요금",
     0,
     max_fee,
     max_fee
 )
 
 
-filtered = filtered[
-    filtered["요금_숫자"] <= fee_limit
+
+result = result[
+    result["요금숫자"] <= fee
 ]
 
 
+
 st.write(
-    f"검색 결과 : {len(filtered)}개"
+    f"검색 결과 : {len(result)}개"
 )
 
 
 
-# -------------------------
-# 지도 표시
-# -------------------------
+# -----------------------------
+# 지도 생성
+# -----------------------------
+
 
 center = [
-    filtered[lat_col].mean(),
-    filtered[lon_col].mean()
+    result[lat_col].mean(),
+    result[lon_col].mean()
 ]
 
 
 m = folium.Map(
     location=center,
-    zoom_start=13
+    zoom_start=12
 )
 
 
 
-for _, row in filtered.iterrows():
+# ★ 중요: 지도 마커 최대 300개 제한
+map_data = result.head(300)
+
+
+
+for _, row in map_data.iterrows():
 
     popup = f"""
     <b>{row[name_col]}</b><br>
@@ -251,38 +276,44 @@ for _, row in filtered.iterrows():
     요금 : {row[fee_col]}
     """
 
-    folium.Marker(
+
+    folium.CircleMarker(
         location=[
             row[lat_col],
             row[lon_col]
         ],
+        radius=6,
         popup=popup,
-        tooltip=row[name_col],
-        icon=folium.Icon(
-            color="red",
-            icon="car",
-            prefix="fa"
-        )
+        color="red",
+        fill=True,
+        fill_color="red"
     ).add_to(m)
+
+
+
+st.caption(
+    "지도에는 최대 300개 주차장만 표시됩니다."
+)
 
 
 
 st_folium(
     m,
-    width=1200,
-    height=600
+    width=900,
+    height=550
 )
 
 
 
-# -------------------------
-# 결과표
-# -------------------------
+# -----------------------------
+# 표 출력
+# -----------------------------
+
 
 st.subheader("주차장 목록")
 
 
-show = [
+show_cols = [
     name_col,
     gu_col,
     fee_col
@@ -290,5 +321,6 @@ show = [
 
 
 st.dataframe(
-    filtered[show]
+    result[show_cols],
+    height=400
 )
