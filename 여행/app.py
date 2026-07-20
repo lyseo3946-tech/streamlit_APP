@@ -1,190 +1,299 @@
 import streamlit as st
 import random
 from datetime import datetime
+import urllib.parse
 
 
-# 페이지 설정
 st.set_page_config(
     page_title="랜덤 여행 추천기",
     page_icon="🎲",
-    layout="centered"
+    layout="wide"
 )
 
 
+# -----------------------------
 # 여행 데이터
-travel_data = {
-    "서울": [
-        ("경복궁", "역사 관광", 3000),
-        ("남산서울타워", "야경", 21000),
-        ("익선동", "카페 거리", 15000),
-        ("한강공원", "산책", 0),
-        ("성수동", "핫플레이스", 20000),
-        ("롯데월드", "놀이공원", 62000),
-        ("북촌한옥마을", "문화 체험", 0),
-    ],
+# -----------------------------
 
-    "부산": [
-        ("해운대", "바다 여행", 0),
-        ("광안리", "야경", 0),
-        ("감천문화마을", "관광", 0),
-        ("국제시장", "먹거리", 15000),
-        ("흰여울문화마을", "산책", 0),
-        ("송도 케이블카", "체험", 17000),
-    ],
+places = [
 
-    "제주": [
-        ("성산일출봉", "자연 관광", 5000),
-        ("협재해수욕장", "바다", 0),
-        ("우도", "섬 여행", 15000),
-        ("오설록", "카페", 12000),
-        ("카멜리아힐", "정원", 10000),
-        ("용머리해안", "자연", 2000),
-    ]
+{
+"name":"경복궁",
+"region":"서울",
+"type":"역사",
+"cost":3000,
+"desc":"조선 시대 대표 궁궐로 한국의 역사를 느낄 수 있는 장소",
+"image":"https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Gyeongbokgung_Palace%2C_Seoul%2C_Korea.jpg/640px-Gyeongbokgung_Palace%2C_Seoul%2C_Korea.jpg"
+},
+
+{
+"name":"성수동",
+"region":"서울",
+"type":"카페",
+"cost":20000,
+"desc":"감성 카페와 편집숍이 많은 서울 핫플레이스",
+"image":"https://upload.wikimedia.org/wikipedia/commons/thumb/6/68/Seongsu-dong_Seoul.jpg/640px-Seongsu-dong_Seoul.jpg"
+},
+
+{
+"name":"해운대 해수욕장",
+"region":"부산",
+"type":"바다",
+"cost":0,
+"desc":"부산을 대표하는 아름다운 해변",
+"image":"https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Haeundae_Beach.jpg/640px-Haeundae_Beach.jpg"
+},
+
+{
+"name":"감천문화마을",
+"region":"부산",
+"type":"관광",
+"cost":0,
+"desc":"알록달록한 집들이 있는 부산 대표 관광지",
+"image":"https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Gamcheon_Culture_Village.jpg/640px-Gamcheon_Culture_Village.jpg"
+},
+
+{
+"name":"성산일출봉",
+"region":"제주",
+"type":"자연",
+"cost":5000,
+"desc":"제주 대표 자연 명소",
+"image":"https://upload.wikimedia.org/wikipedia/commons/thumb/3/3d/Seongsan_Ilchulbong.jpg/640px-Seongsan_Ilchulbong.jpg"
+},
+
+{
+"name":"협재해수욕장",
+"region":"제주",
+"type":"바다",
+"cost":0,
+"desc":"맑은 바다와 아름다운 풍경을 가진 해변",
+"image":"https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/Hyeopjae_Beach.jpg/640px-Hyeopjae_Beach.jpg"
+},
+
+{
+"name":"전주 한옥마을",
+"region":"전주",
+"type":"문화",
+"cost":10000,
+"desc":"전통 한옥과 먹거리가 가득한 여행지",
+"image":"https://upload.wikimedia.org/wikipedia/commons/thumb/5/55/Jeonju_Hanok_Village.jpg/640px-Jeonju_Hanok_Village.jpg"
+},
+
+{
+"name":"경주 불국사",
+"region":"경주",
+"type":"역사",
+"cost":6000,
+"desc":"신라 시대 대표 문화유산",
+"image":"https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/Bulguksa_Temple.jpg/640px-Bulguksa_Temple.jpg"
+},
+
+{
+"name":"강릉 경포대",
+"region":"강릉",
+"type":"바다",
+"cost":0,
+"desc":"동해 바다와 산책을 즐길 수 있는 장소",
+"image":"https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Gyeongpo_Beach.jpg/640px-Gyeongpo_Beach.jpg"
+},
+
+{
+"name":"여수 밤바다",
+"region":"여수",
+"type":"야경",
+"cost":15000,
+"desc":"아름다운 야경으로 유명한 여행지",
+"image":"https://upload.wikimedia.org/wikipedia/commons/thumb/8/82/Yeosu_Night_Sea.jpg/640px-Yeosu_Night_Sea.jpg"
 }
+
+]
 
 
 fortunes = [
-    "🍀 오늘은 예상하지 못한 즐거운 일이 생길 운입니다.",
-    "🌈 새로운 장소에서 특별한 추억을 만들 수 있습니다.",
-    "📸 오늘 찍은 사진은 오래 기억될 것입니다.",
-    "☕ 카페에서 작은 행복을 발견하는 날입니다.",
-    "🌊 자연과 함께하면 좋은 에너지를 얻습니다.",
-    "✨ 즉흥적인 선택이 최고의 여행이 됩니다."
+"🍀 오늘은 새로운 장소에서 좋은 추억을 만들 운입니다.",
+"📸 오늘 찍은 사진은 오래 기억될 것입니다.",
+"🌊 자연과 함께하면 좋은 에너지를 얻습니다.",
+"☕ 카페에서 작은 행복을 발견합니다.",
+"✨ 즉흥 여행이 최고의 선택입니다."
 ]
 
 
 quotes = [
-    "여행은 돌아왔을 때 더 성장한 나를 만나는 시간입니다.",
-    "좋은 여행은 좋은 기억을 남깁니다.",
-    "새로운 길에서 새로운 나를 발견합니다.",
-    "인생은 여행이고 순간은 추억입니다."
+"여행은 새로운 나를 발견하는 시간입니다.",
+"좋은 여행은 좋은 기억을 남깁니다.",
+"떠나는 순간 일상은 모험이 됩니다.",
+"추억은 여행이 남기는 가장 큰 선물입니다."
 ]
 
 
-# 제목
+# -----------------------------
+# 화면
+# -----------------------------
+
 st.title("🎲 랜덤 여행 추천기")
-st.write("버튼 하나로 오늘의 여행 코스를 추천받아보세요!")
 
-
-# 사이드바
-st.sidebar.title("⚙️ 여행 설정")
-
-region = st.sidebar.selectbox(
-    "지역 선택",
-    list(travel_data.keys())
+st.write(
+"지역을 선택하고 랜덤으로 여행지를 추천받아보세요!"
 )
 
 
-place_count = st.sidebar.slider(
-    "추천 장소 개수",
-    2,
-    5,
-    3
+regions = sorted(
+list(set(
+[x["region"] for x in places]
+))
 )
 
 
-# 추천 버튼
-if st.button("🎲 랜덤 여행 추천받기"):
+selected_region = st.sidebar.selectbox(
+"📍 지역 선택",
+["전체"] + regions
+)
 
-    selected = random.sample(
-        travel_data[region],
-        place_count
+
+number = st.sidebar.slider(
+"추천 장소 개수",
+1,
+5,
+3
+)
+
+
+# -----------------------------
+# 추천
+# -----------------------------
+
+if st.button(
+"🎲 여행 코스 추천받기",
+use_container_width=True
+):
+
+    if selected_region == "전체":
+        data = places
+    else:
+        data = [
+            x for x in places
+            if x["region"] == selected_region
+        ]
+
+
+    result = random.sample(
+        data,
+        min(number,len(data))
     )
 
 
-    total_cost = sum(
-        item[2] for item in selected
+    st.success(
+        "오늘의 여행 코스가 완성되었습니다!"
     )
 
 
-    st.success("✨ 여행 코스가 완성되었습니다!")
+    total = sum(
+        x["cost"] for x in result
+    )
 
 
-    st.subheader("🗺 오늘의 여행 코스")
+    for i,item in enumerate(result,1):
 
+        st.divider()
 
-    for idx, item in enumerate(selected, 1):
-
-        name = item[0]
-        category = item[1]
-        cost = item[2]
-
-
-        st.markdown("---")
-
-        st.subheader(
-            f"{idx}. {name}"
+        col1,col2 = st.columns(
+            [1,2]
         )
 
-        col1, col2 = st.columns(2)
 
         with col1:
-            st.write(
-                f"📌 종류 : {category}"
+            st.image(
+                item["image"],
+                use_container_width=True
             )
+
 
         with col2:
+
+            st.header(
+                f"{i}. {item['name']}"
+            )
+
             st.write(
-                f"💰 예상 비용 : {cost:,}원"
+                f"📍 지역 : {item['region']}"
+            )
+
+            st.write(
+                f"🏷 종류 : {item['type']}"
+            )
+
+            st.write(
+                item["desc"]
+            )
+
+            st.write(
+                f"💰 예상 비용 : {item['cost']:,}원"
             )
 
 
-    st.markdown("---")
+            map_url = (
+                "https://www.google.com/maps/search/?api=1&query="
+                +
+                urllib.parse.quote(
+                    item["name"]
+                )
+            )
 
 
-    a, b, c = st.columns(3)
+            st.markdown(
+                f"[🗺 지도 보기]({map_url})"
+            )
 
-    a.metric(
+
+    st.divider()
+
+
+    c1,c2,c3 = st.columns(3)
+
+
+    c1.metric(
         "추천 장소",
-        f"{len(selected)}곳"
+        f"{len(result)}곳"
     )
 
-    b.metric(
-        "예상 비용",
-        f"{total_cost:,}원"
+
+    c2.metric(
+        "총 예상 비용",
+        f"{total:,}원"
     )
 
-    b.metric(
+
+    c3.metric(
         "추천 점수",
         f"{random.randint(85,100)}점"
     )
 
 
-    st.subheader("🍀 오늘의 여행 운세")
+    st.subheader(
+        "🍀 오늘의 여행 운세"
+    )
 
     st.info(
         random.choice(fortunes)
     )
 
 
-    st.subheader("💬 오늘의 여행 명언")
+    st.subheader(
+        "💬 여행 명언"
+    )
 
     st.success(
         random.choice(quotes)
     )
 
 
-    st.subheader("📅 추천 시간")
-
-    st.write(
+    st.caption(
+        "생성 시간 : "
+        +
         datetime.now().strftime(
-            "%Y-%m-%d %H:%M:%S"
+            "%Y-%m-%d %H:%M"
         )
-    )
-
-
-    result = "\n".join(
-        [
-            f"{i+1}. {x[0]} ({x[1]})"
-            for i, x in enumerate(selected)
-        ]
-    )
-
-
-    st.download_button(
-        label="📥 여행 코스 저장",
-        data=result,
-        file_name="my_trip.txt"
     )
 
 
@@ -193,10 +302,3 @@ else:
     st.info(
         "왼쪽에서 지역을 선택하고 버튼을 눌러주세요."
     )
-
-
-st.divider()
-
-st.caption(
-    "Made with Streamlit 🎈"
-)
