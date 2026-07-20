@@ -1,0 +1,10 @@
+travel-app/
+│
+├── app.py
+├── utils.py          # 랜덤 추천 함수
+├── data/
+│   └── places.csv    # 여행지 데이터 100개 이상
+├── assets/
+│   └── banner.png
+├── requirements.txt
+└── README.md
